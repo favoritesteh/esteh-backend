@@ -1,6 +1,11 @@
 [build]
 builder = "NIXPACKS"
 
+[start]
+command = "php artisan migrate --force && php-fpm"
+
 [variables]
 PORT = "8080"
 APP_ENV = "production"
+APP_DEBUG = "false"
+LOG_CHANNEL = "stderr"
