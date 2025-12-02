@@ -1,0 +1,6 @@
+[build]
+builder = "NIXPACKS"
+
+[variables]
+PORT = "8080"
+APP_ENV = "production"
