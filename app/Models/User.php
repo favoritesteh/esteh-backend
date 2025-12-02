@@ -10,7 +10,9 @@ class User extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
-    protected $fillable = ['username', 'password', 'role', 'outlet_id'];
+    // HAPUS 'password' DARI SINI!
+    protected $fillable = ['username', 'role', 'outlet_id'];
+
     protected $hidden = ['password'];
 
     public function outlet()
