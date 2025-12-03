@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BarangMasuk;
 use App\Models\StokGudang;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BarangMasukController extends Controller
@@ -18,10 +19,9 @@ class BarangMasukController extends Controller
     public function show($id)
     {
         try {
-            $barangMasuk = BarangMasuk::with('bahan')->findOrFail($id);
             return response()->json([
                 'message' => 'Detail barang masuk ditemukan',
-                'data' => $barangMasuk
+                'data' => BarangMasuk::with('bahan')->findOrFail($id)
             ], 200);
         } catch (\Exception $e) {
             Log::error('Barang Masuk Show Error: ' . $e->getMessage());
@@ -51,9 +51,10 @@ class BarangMasukController extends Controller
                 'supplier' => $request->supplier
             ]);
 
+            // INI YANG BENAR & UNIVERSAL (JALAN DI SQLITE, POSTGRESQL, MYSQL)
             StokGudang::updateOrCreate(
                 ['bahan_id' => $request->bahan_id],
-                ['stok' => \DB::raw("COALESCE(stok, 0) + {$jumlah}")]
+                ['stok' => DB::raw('COALESCE(stok, 0) + ' . $jumlah)]
             );
 
             return response()->json([
@@ -90,16 +91,13 @@ class BarangMasukController extends Controller
             $bahanLama  = $barangMasuk->bahan_id;
             $bahanBaru  = $request->bahan_id;
 
-            // Kurangi stok dari bahan lama
             StokGudang::where('bahan_id', $bahanLama)->decrement('stok', $jumlahLama);
 
-            // Tambah ke bahan baru (bisa sama atau beda)
             StokGudang::updateOrCreate(
                 ['bahan_id' => $bahanBaru],
-                ['stok' => \DB::raw("COALESCE(stok, 0) + {$jumlahBaru}")]
+                ['stok' => DB::raw('COALESCE(stok, 0) + ' . $jumlahBaru)]
             );
 
-            // UPDATE RECORD BARANG MASUK (INI YANG BENAR!)
             $barangMasuk->update([
                 'bahan_id' => $bahanBaru,
                 'jumlah'   => $jumlahBaru,
@@ -108,7 +106,7 @@ class BarangMasukController extends Controller
 
             return response()->json([
                 'message' => 'Barang masuk berhasil diperbarui!',
-                'data'    => $barangMasuk->fresh()->load('bahan')
+                'data'    => $barangMasuk->load('bahan')
             ], 200);
 
         } catch (\Exception $e) {
