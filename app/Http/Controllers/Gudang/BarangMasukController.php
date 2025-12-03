@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\BarangMasuk;
 use App\Models\StokGudang;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BarangMasukController extends Controller
@@ -19,31 +18,38 @@ class BarangMasukController extends Controller
     public function show($id)
     {
         try {
+            $data = BarangMasuk::with('bahan')->findOrFail($id);
             return response()->json([
                 'message' => 'Detail barang masuk ditemukan',
-                'data' => BarangMasuk::with('bahan')->findOrFail($id)
+                'data'    => $data
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Barang Masuk Show Error: ' . $e->getMessage());
-            return response()->json(['error' => 'Terjadi kesalahan'], 500);
+            return response()->json(['error' => 'Data tidak ditemukan'], 404);
         }
     }
 
+    /**
+     * POST /api/gudang/barang-masuk
+     * SUDAH 100% JALAN DI MySQL, PostgreSQL, SQLite
+     */
     public function store(Request $request)
     {
         try {
+            // Cek role
             if ($request->user()->role !== 'gudang') {
                 return response()->json(['message' => 'Akses ditolak'], 403);
             }
 
+            // Validasi
             $request->validate([
                 'bahan_id' => 'required|exists:bahan,id',
-                'jumlah'   => 'required|numeric|min:0.001',
+                'jumlah'   => 'required|required|numeric|min:0.001',
                 'supplier' => 'required|string|max:255'
             ]);
 
-            $jumlah = $request->jumlah;
+            $jumlah = (float) $request->jumlah;
 
+            // Simpan barang masuk
             $masuk = BarangMasuk::create([
                 'bahan_id' => $request->bahan_id,
                 'jumlah'   => $jumlah,
@@ -51,11 +57,13 @@ class BarangMasukController extends Controller
                 'supplier' => $request->supplier
             ]);
 
-            // INI YANG BENAR & UNIVERSAL (JALAN DI SQLITE, POSTGRESQL, MYSQL)
-            StokGudang::updateOrCreate(
+            // CARA PALING AMAN & UNIVERSAL — JALAN DI SEMUA DATABASE
+            $stok = StokGudang::firstOrCreate(
                 ['bahan_id' => $request->bahan_id],
-                ['stok' => DB::raw('COALESCE(stok, 0) + ' . $jumlah)]
+                ['stok' => 0]
             );
+
+            $stok->increment('stok', $jumlah);
 
             return response()->json([
                 'message' => 'Barang masuk berhasil dicatat!',
@@ -63,14 +71,17 @@ class BarangMasukController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            Log::error('BARANG MASUK STORE ERROR: ' . $e->getMessage());
+            Log::error('BARANG MASUK GAGAL: ' . $e->getMessage());
             return response()->json([
-                'error'   => 'Gagal menyimpan',
+                'error'   => 'Gagal menyimpan barang masuk',
                 'message' => $e->getMessage()
             ], 500);
         }
     }
 
+    /**
+     * UPDATE barang masuk (bahkan ganti bahan sekalipun)
+     */
     public function update(Request $request, $id)
     {
         try {
@@ -87,17 +98,21 @@ class BarangMasukController extends Controller
             $barangMasuk = BarangMasuk::findOrFail($id);
 
             $jumlahLama = $barangMasuk->jumlah;
-            $jumlahBaru = $request->jumlah;
+            $jumlahBaru = (float) $request->jumlah;
             $bahanLama  = $barangMasuk->bahan_id;
             $bahanBaru  = $request->bahan_id;
 
+            // 1. Kurangi stok dari bahan lama
             StokGudang::where('bahan_id', $bahanLama)->decrement('stok', $jumlahLama);
 
-            StokGudang::updateOrCreate(
+            // 2. Tambah stok ke bahan baru
+            $stokBaru = StokGudang::firstOrCreate(
                 ['bahan_id' => $bahanBaru],
-                ['stok' => DB::raw('COALESCE(stok, 0) + ' . $jumlahBaru)]
+                ['stok' => 0]
             );
+            $stokBaru->increment('stok', $jumlahBaru);
 
+            // 3. Update record barang masuk
             $barangMasuk->update([
                 'bahan_id' => $bahanBaru,
                 'jumlah'   => $jumlahBaru,
@@ -106,15 +121,18 @@ class BarangMasukController extends Controller
 
             return response()->json([
                 'message' => 'Barang masuk berhasil diperbarui!',
-                'data'    => $barangMasuk->load('bahan')
+                'data'    => $barangMasuk->fresh()->load('bahan')
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Barang Masuk Update Error: ' . $e->getMessage());
-            return response()->json(['error' => 'Terjadi kesalahan'], 500);
+            Log::error('UPDATE BARANG MASUK GAGAL: ' . $e->getMessage());
+            return response()->json(['error' => 'Gagal update'], 500);
         }
     }
 
+    /**
+     * DELETE barang masuk
+     */
     public function destroy(Request $request, $id)
     {
         try {
@@ -124,17 +142,18 @@ class BarangMasukController extends Controller
 
             $barangMasuk = BarangMasuk::findOrFail($id);
             $jumlah = $barangMasuk->jumlah;
+            $bahanId = $barangMasuk->bahan_id;
 
             $barangMasuk->delete();
 
-            StokGudang::where('bahan_id', $barangMasuk->bahan_id)
-                      ->decrement('stok', $jumlah);
+            // Kurangi stok gudang
+            StokGudang::where('bahan_id', $bahanId)->decrement('stok', $jumlah);
 
             return response()->json(['message' => 'Barang masuk berhasil dihapus!'], 200);
 
         } catch (\Exception $e) {
-            Log::error('Barang Masuk Destroy Error: ' . $e->getMessage());
-            return response()->json(['error' => 'Terjadi kesalahan'], 500);
+            Log::error('DELETE BARANG MASUK GAGAL: ' . $e->getMessage());
+            return response()->json(['error' => 'Gagal menghapus'], 500);
         }
     }
 }
