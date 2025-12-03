@@ -30,13 +30,9 @@ class BarangMasukController extends Controller
         }
     }
 
-    /**
-     * STORE – Tambah barang masuk
-     */
     public function store(Request $request)
     {
         try {
-            {
             if ($request->user()->role !== 'gudang') {
                 return response()->json(['message' => 'Akses ditolak'], 403);
             }
@@ -47,20 +43,15 @@ class BarangMasukController extends Controller
                 'supplier' => 'required|string|max:255'
             ]);
 
-            // HAPUS KODE KONVERSI ANEH INI SELAMANYA
-            // $jumlah = floatval(str_replace('.', '', $request->jumlah)) / 1000;
-
-            // Gunakan langsung nilai yang sudah divalidasi numeric
-            $jumlah = $request->jumlah; // contoh: 1.500, 0.250, 15.000
+            $jumlah = $request->jumlah;
 
             $masuk = BarangMasuk::create([
                 'bahan_id' => $request->bahan_id,
-                'jumlah'   => $jumlah,           // simpan apa adanya (1.500)
+                'jumlah'   => $jumlah,
                 'tanggal'  => now(),
                 'supplier' => $request->supplier
             ]);
 
-            // INI YANG BENAR & AMAN SELAMANYA
             StokGudang::updateOrCreate(
                 ['bahan_id' => $request->bahan_id],
                 ['stok' => DB::raw('stok + ' . $jumlah)]
@@ -77,9 +68,6 @@ class BarangMasukController extends Controller
         }
     }
 
-    /**
-     * UPDATE – Edit barang masuk (bahkan kalau ganti bahan)
-     */
     public function update(Request $request, $id)
     {
         try {
@@ -95,21 +83,18 @@ class BarangMasukController extends Controller
 
             $barangMasuk = BarangMasuk::findOrFail($id);
 
-            $jumlahLama = $barangMasuk->jumlah;        // nilai lama (misal 2.000)
-            $jumlahBaru = $request->jumlah;           // nilai baru (misal 3.500)
+            $jumlahLama = $barangMasuk->jumlah;
+            $jumlahBaru = $request->jumlah;
             $bahanLama  = $barangMasuk->bahan_id;
             $bahanBaru  = $request->bahan_id;
 
-            // 1. Kurangi stok dari bahan lama
             StokGudang::where('bahan_id', $bahanLama)->decrement('stok', $jumlahLama);
 
-            // 2. Tambahkan ke bahan baru (bisa sama atau beda)
             StokGudang::updateOrCreate(
                 ['bahan_id' => $bahanBaru],
                 ['stok' => DB::raw('stok + ' . $jumlahBaru)]
             );
 
-            // 3. Update record
             $barangMasuk->update([
                 'bahan_id' => $bahanBaru,
                 'jumlah'   => $jumlahBaru,
@@ -127,9 +112,6 @@ class BarangMasukController extends Controller
         }
     }
 
-    /**
-     * DESTROY – Hapus barang masuk
-     */
     public function destroy(Request $request, $id)
     {
         try {
@@ -142,7 +124,6 @@ class BarangMasukController extends Controller
 
             $barangMasuk->delete();
 
-            // Kurangi stok gudang
             StokGudang::where('bahan_id', $barangMasuk->bahan_id)
                       ->decrement('stok', $jumlah);
 
