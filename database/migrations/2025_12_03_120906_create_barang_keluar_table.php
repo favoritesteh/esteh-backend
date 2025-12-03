@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('barang_keluar', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bahan_id')->constrained('bahan')->onDelete('cascade');
-            $table->foreignId('outlet_id')->constrained('outlet')->onDelete('cascade');
+            $table->foreignId('outlet_id')->constrained('outlets')->onDelete('cascade');
             $table->foreignId('permintaan_id')->nullable()->constrained('permintaan_stok')->onDelete('set null');
             $table->decimal('jumlah', 10, 3);
             $table->timestamp('tanggal_keluar');
