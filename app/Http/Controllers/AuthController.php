@@ -4,41 +4,48 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     public function login(Request $request)
     {
         $request->validate([
-            'username' => 'required',
-            'password' => 'required',
+            'username' => 'required|string',
+            'password' => 'required|string',
         ]);
 
         $user = User::where('username', $request->username)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Username atau password salah'], 401);
+            throw ValidationException::withMessages([
+                'username' => ['Username atau password salah.'],
+            ]);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Inisialisasi session untuk mode stateful
+        Auth::login($user);
+        $request->session()->regenerate();
 
         return response()->json([
             'message' => 'Login berhasil!',
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user
+            'user' => $user->load('role'),  // Asumsi ada relasi 'role'; sesuaikan jika berbeda
         ]);
     }
 
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        return response()->json($request->user()->load('role'));
     }
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
         return response()->json(['message' => 'Logout berhasil']);
     }
 }
