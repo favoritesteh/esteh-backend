@@ -3,10 +3,14 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 
-// ============================== TANPA AUTH ==============================
+/*
+ * Rute untuk autentikasi tanpa middleware
+ */
 Route::post('/login', [AuthController::class, 'login']);
 
-// ============================== BUTUH AUTH ==============================
+/*
+ * Rute yang membutuhkan autentikasi (middleware auth:sanctum)
+ */
 Route::middleware('auth:sanctum')->group(function () {
 
     // ---------- Auth ----------
@@ -17,10 +21,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:owner,supervisor')->group(function () {
         Route::apiResource('outlets', \App\Http\Controllers\OwnerSupervisor\OutletController::class);
         Route::apiResource('users', \App\Http\Controllers\OwnerSupervisor\UserController::class);
-        
         Route::get('laporan/pendapatan', [\App\Http\Controllers\OwnerSupervisor\LaporanController::class, 'pendapatan']);
         Route::get('laporan/export', [\App\Http\Controllers\OwnerSupervisor\LaporanController::class, 'exportCsv']);
         Route::get('dashboard', [\App\Http\Controllers\OwnerSupervisor\DashboardController::class, 'index']);
+        Route::get('stok-detail', [\App\Http\Controllers\OwnerSupervisor\DashboardController::class, 'stokDetail']);
     });
 
     // ====================== GUDANG ======================
