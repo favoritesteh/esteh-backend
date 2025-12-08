@@ -6,16 +6,8 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'http://localhost:8081',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:8081',
-        // Tambahkan nanti kalau frontend sudah di-deploy
-        // 'https://nama-frontend.vercel.app',
-    ],
+    // PAKAI BINTANG DULU — INI YANG BIKIN SEMUA BERES SEKETIKA
+    'allowed_origins' => ['*'],
 
     'allowed_headers' => ['*'],
 
@@ -23,5 +15,6 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => true, // WAJIB true kalau pakai Sanctum + cookie
+    'supports_credentials' => true,
+
 ];
