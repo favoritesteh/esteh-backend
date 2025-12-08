@@ -1,13 +1,16 @@
 <?php
 
 return [
-
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
-    // PAKAI BINTANG DULU — INI YANG BIKIN SEMUA BERES SEKETIKA
-    'allowed_origins' => ['*'],
+    // PAKAI WILDCARD BIAR GA ERROR LAGI
+    'allowed_origins_patterns' => [
+        '^http?://(localhost|127\.0\.0\.1)(:\d+)?$',
+    ],
+
+    'allowed_origins' => [], // kosongin
 
     'allowed_headers' => ['*'],
 
@@ -16,5 +19,4 @@ return [
     'max_age' => 0,
 
     'supports_credentials' => true,
-
 ];
