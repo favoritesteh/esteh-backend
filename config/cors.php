@@ -1,30 +1,17 @@
 <?php
 
 return [
-
-    /*
-    |--------------------------------------------------------------------------
-    | Cross-Origin Resource Sharing (CORS) Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Di sini Anda dapat mengonfigurasi pengaturan Cross-Origin Resource Sharing (CORS).
-    | Pengaturan ini digunakan oleh middleware `\Fruitcake\Cors\HandleCors`.
-    |
-    */
-
     'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'logout'],
 
     'allowed_methods' => ['*'],
 
-    // GANTI '*' dengan domain frontend Anda (wajib untuk credentials = true)
     'allowed_origins' => [
-        'http://localhost:3000',             // development React/Vue/Nuxt
-        'http://127.0.0.1:3000',
-        'http://localhost:5173',             // Vite default
+        'https://esteh-backend-production.up.railway.app',  // Backend domain
+        'http://localhost:5173',                            // Vite local (HTTP)
         'http://127.0.0.1:5173',
-        'http://localhost:8081',
-        'http://127.0.0.1:8081'              // alternatif
-        // tambahkan domain lain jika diperlukan
+        'http://localhost:8081',                            // Additional local port
+        'http://127.0.0.1:8081',
+        // Add production frontend domains here when deployed (e.g., 'https://esteh-frontend.vercel.app')
     ],
 
     'allowed_origins_patterns' => [],
@@ -35,7 +22,5 @@ return [
 
     'max_age' => 0,
 
-    // WAJIB true untuk Sanctum stateful (cookie-based auth)
-    'supports_credentials' => true,
-
+    'supports_credentials' => true,  // Required for cookie-based authentication
 ];
