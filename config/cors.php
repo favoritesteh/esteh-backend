@@ -3,7 +3,7 @@
 return [
     'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'logout'],
 
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    'allowed_methods' => ['*'],
 
     'allowed_origins' => [
         'https://esteh-backend-production.up.railway.app',  
