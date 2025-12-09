@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    /**
+     * POST /api/login
+     */
     public function login(Request $request)
     {
         $request->validate([
@@ -25,27 +27,58 @@ class AuthController extends Controller
             ]);
         }
 
-        // Inisialisasi session untuk mode stateful
-        Auth::login($user);
-        $request->session()->regenerate();
+        // Hapus session login, kita pakai Sanctum token (stateless & cocok untuk API + Railway)
+        // Auth::login($user);                    ← JANGAN DIPAKAI
+        // $request->session()->regenerate();     ← JANGAN DIPAKAI
+
+        // Buat token Sanctum
+        $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Login berhasil!',
-            'user' => $user->load('role'),  // Asumsi ada relasi 'role'; sesuaikan jika berbeda
+            'user'    => [
+                'id'         => $user->id,
+                'username'   => $user->username,
+                'role'       => $user->role,
+                'outlet_id'  => $user->outlet_id,
+                'outlet'     => $user->outlet ? [
+                    'id'   => $user->outlet->id,
+                    'nama' => $user->outlet->nama,
+                ] : null,
+            ],
+            'token'   => $token,
         ]);
     }
 
+    /**
+     * GET /api/me
+     */
     public function me(Request $request)
     {
-        return response()->json($request->user()->load('role'));
+        $user = $request->user()->load('outlet');
+
+        return response()->json([
+            'id'         => $user->id,
+            'username'   => $user->username,
+            'role'       => $user->role,
+            'outlet_id'  => $user->outlet_id,
+            'outlet'     => $user->outlet ? [
+                'id'   => $user->outlet->id,
+                'nama' => $user->outlet->nama,
+            ] : null,
+        ]);
     }
 
+    /**
+     * POST /api/logout
+     */
     public function logout(Request $request)
     {
-        Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // Hapus token yang sedang dipakai
+        $request->user()->currentAccessToken()->delete();
 
-        return response()->json(['message' => 'Logout berhasil']);
+        return response()->json([
+            'message' => 'Logout berhasil'
+        ]);
     }
 }
