@@ -12,9 +12,9 @@ use App\Http\Controllers\AuthController;
 | sehingga browser mengizinkan request utama (POST/GET/PUT/DELETE).
 |
 */
-Route::options('/{any}', function () {
-    return response()->json(['status' => 'OK'], 200);
-})->where('any', '.*');
+// Route::options('/{any}', function () {
+//     return response()->json(['status' => 'OK'], 200);
+// })->where('any', '.*');
 
 
 /*
