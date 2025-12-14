@@ -1,8 +1,30 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 
+/*
+|--------------------------------------------------------------------------
+| GLOBAL OPTIONS HANDLER (EXPRESS-LIKE CORS)
+|--------------------------------------------------------------------------
+| Ini MENIRU app.use(cors()) di Express
+| Menangani semua preflight OPTIONS
+|--------------------------------------------------------------------------
+*/
+Route::options('/{any}', function (Request $request) {
+    return response()->json(['status' => 'OK'], 200)
+        ->header('Access-Control-Allow-Origin', '*')
+        ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+})->where('any', '.*');
+
+
+/*
+|--------------------------------------------------------------------------
+| API ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::middleware('api')->group(function () {
 
     // ================= AUTH TANPA LOGIN =================
