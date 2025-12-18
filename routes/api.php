@@ -60,6 +60,7 @@ Route::middleware('api')->group(function () {
             Route::apiResource('transaksi', \App\Http\Controllers\Karyawan\TransaksiController::class);
             Route::get('stok/outlet', [\App\Http\Controllers\Karyawan\StokController::class, 'outlet']);
             Route::apiResource('permintaan-stok', \App\Http\Controllers\Karyawan\PermintaanStokController::class);
+            Route::post('barang-keluar/{id}/terima', [\App\Http\Controllers\Gudang\BarangKeluarController::class, 'terima']);
         });
     });
 });
