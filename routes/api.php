@@ -34,8 +34,8 @@ Route::middleware('api')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
 
+        // === ROLE: OWNER & SUPERVISOR ===
         Route::middleware('role:owner,supervisor')->group(function () {
-        
             Route::apiResource('outlets', \App\Http\Controllers\OwnerSupervisor\OutletController::class);
             Route::apiResource('users', \App\Http\Controllers\OwnerSupervisor\UserController::class);
             Route::get('dashboard', [\App\Http\Controllers\OwnerSupervisor\DashboardController::class, 'index']);
@@ -45,9 +45,12 @@ Route::middleware('api')->group(function () {
             Route::get('laporan/transaksi-detail', [\App\Http\Controllers\OwnerSupervisor\LaporanController::class, 'transaksiDetail']);
         });
 
+        // === ROLE: GUDANG ===
         Route::prefix('gudang')->group(function () {
             Route::middleware('role:gudang')->group(function () {
+                // Endpoint CRUD Bahan (Hanya Gudang yang bisa tambah/edit/hapus)
                 Route::apiResource('bahan', \App\Http\Controllers\Gudang\BahanController::class);
+                
                 Route::apiResource('barang-masuk', \App\Http\Controllers\Gudang\BarangMasukController::class);
                 Route::get('stok', [\App\Http\Controllers\Gudang\StokController::class, 'gudang']);
                 Route::apiResource('permintaan-stok', \App\Http\Controllers\Gudang\PermintaanStokController::class);
@@ -55,11 +58,19 @@ Route::middleware('api')->group(function () {
                 Route::post('barang-keluar/{id}/terima', [\App\Http\Controllers\Gudang\BarangKeluarController::class, 'terima']);
             });
         });
+
+        // === ROLE: KARYAWAN ===
         Route::middleware('role:karyawan')->group(function () {
             Route::apiResource('produk', \App\Http\Controllers\Karyawan\ProdukController::class);
             Route::apiResource('transaksi', \App\Http\Controllers\Karyawan\TransaksiController::class);
             Route::get('stok/outlet', [\App\Http\Controllers\Karyawan\StokController::class, 'outlet']);
             Route::apiResource('permintaan-stok', \App\Http\Controllers\Karyawan\PermintaanStokController::class);
+            
+            // Endpoint Baru: Karyawan melihat referensi bahan di gudang (Read Only)
+            // URL: /api/bahan-gudang
+            Route::get('bahan-gudang', [\App\Http\Controllers\Karyawan\BahanController::class, 'index']);
+
+            // Menerima barang keluar dari gudang
             Route::post('barang-keluar/{id}/terima', [\App\Http\Controllers\Gudang\BarangKeluarController::class, 'terima']);
         });
     });
