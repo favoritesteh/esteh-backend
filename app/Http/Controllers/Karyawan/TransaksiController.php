@@ -11,8 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Support\Facades\Validator;
+// [MODIFIKASI] Gunakan Library Native Cloudinary (Manual Bypass)
+use Cloudinary\Cloudinary;
 
 class TransaksiController extends Controller
 {
@@ -97,12 +98,29 @@ class TransaksiController extends Controller
 
                 // Unggah bukti QRIS jika ada
                 $buktiQris = null;
+                
+                // --- [START] MANUAL BYPASS CLOUDINARY UPLOAD ---
                 if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
-                    $uploaded = Cloudinary::upload($request->file('bukti_qris')->getRealPath(), [
-                        'folder' => 'bukti_qris'
+                    // Inisialisasi Manual
+                    $cloudinary = new Cloudinary([
+                        'cloud' => [
+                            'cloud_name' => 'duh9v4hyi',
+                            'api_key'    => '839695134185465',
+                            'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                        ],
+                        'url' => [
+                            'secure' => true
+                        ]
                     ]);
-                    $buktiQris = $uploaded->getSecurePath();
+
+                    $uploaded = $cloudinary->uploadApi()->upload(
+                        $request->file('bukti_qris')->getRealPath(), 
+                        ['folder' => 'bukti_qris']
+                    );
+                    
+                    $buktiQris = $uploaded['secure_url'];
                 }
+                // --- [END] MANUAL BYPASS CLOUDINARY UPLOAD ---
 
                 // Buat transaksi
                 $transaksi = Transaksi::create([
@@ -176,8 +194,6 @@ class TransaksiController extends Controller
         try {
             // Debugging: Log semua input mentah yang diterima
             Log::info('Update Input received (raw): ', $request->all());
-            $rawInput = file_get_contents('php://input');
-            Log::info('Update Input (php://input): ', ['raw' => $rawInput]);
 
             $user = auth()->user();
             if (!$user || !$user->outlet_id || $transaksi->outlet_id !== $user->outlet_id) {
@@ -199,14 +215,8 @@ class TransaksiController extends Controller
 
             // Urai items dari string JSON ke array
             $itemsInput = $request->input('items');
-            Log::info('Items input before decode: ', ['value' => $itemsInput]);
             $items = json_decode($itemsInput, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error('JSON Decode Error for items (update): ', ['input' => $itemsInput, 'error' => json_last_error_msg()]);
-                return response()->json(['error' => ['items' => ['The items field must be a valid JSON array']]], 422);
-            }
-            if (!is_array($items) || empty($items)) {
-                Log::error('Items is not an array or empty: ', ['decoded' => $items]);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($items) || empty($items)) {
                 return response()->json(['error' => ['items' => ['The items field must be a valid JSON array']]], 422);
             }
 
@@ -218,7 +228,6 @@ class TransaksiController extends Controller
                 ]);
 
                 if ($validator->fails()) {
-                    Log::error('Item Validation Failed for index ' . $index . ' (update): ', $validator->errors()->toArray());
                     return response()->json(['error' => ["items.$index" => $validator->errors()->all()]], 422);
                 }
             }
@@ -262,14 +271,31 @@ class TransaksiController extends Controller
 
                 // Unggah bukti QRIS jika ada
                 $buktiQris = $transaksi->bukti_qris;
+                
+                // --- [START] MANUAL BYPASS CLOUDINARY UPLOAD (UPDATE) ---
                 if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
-                    $uploaded = Cloudinary::upload($request->file('bukti_qris')->getRealPath(), [
-                        'folder' => 'bukti_qris'
+                     // Inisialisasi Manual
+                     $cloudinary = new Cloudinary([
+                        'cloud' => [
+                            'cloud_name' => 'duh9v4hyi',
+                            'api_key'    => '839695134185465',
+                            'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                        ],
+                        'url' => [
+                            'secure' => true
+                        ]
                     ]);
-                    $buktiQris = $uploaded->getSecurePath();
+
+                    $uploaded = $cloudinary->uploadApi()->upload(
+                        $request->file('bukti_qris')->getRealPath(), 
+                        ['folder' => 'bukti_qris']
+                    );
+                    $buktiQris = $uploaded['secure_url'];
+
                 } elseif ($request->metode_bayar === 'tunai') {
                     $buktiQris = null;
                 }
+                // --- [END] MANUAL BYPASS CLOUDINARY UPLOAD ---
 
                 // Perbarui transaksi
                 $transaksi->update([
