@@ -23,15 +23,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cloudinary Configuration
+    | Cloudinary Configuration (SUDAH DI-HARDCODE)
     |--------------------------------------------------------------------------
     |
-    | Here you may configure your Cloudinary settings. Cloudinary is a cloud hosted
-    | media management service for all file uploads, storage, delivery and transformation needs.
-    |
+    | Kita kunci langsung URL-nya di sini supaya 100% jalan di Railway
+    | tanpa tergantung variable .env yang kadang nyangkut.
     |
     */
-    'cloud_url' => env('CLOUDINARY_URL', 'cloudinary://'.env('CLOUDINARY_KEY').':'.env('CLOUDINARY_SECRET').'@'.env('CLOUDINARY_CLOUD_NAME')),
+    'cloud_url' => 'cloudinary://839695134185465:TnOly4DFI4JbYvdARmEQjIatvZc@duh9v4hyi',
 
     /**
      * Upload Preset From Cloudinary Dashboard
