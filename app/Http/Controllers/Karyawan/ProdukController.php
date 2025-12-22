@@ -6,7 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Produk;
 use App\Models\Komposisi;
 use Illuminate\Http\Request;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+// Gunakan Library Native Cloudinary (Manual Bypass)
+use Cloudinary\Cloudinary;
 
 class ProdukController extends Controller
 {
@@ -17,7 +18,6 @@ class ProdukController extends Controller
 
     public function store(Request $request)
     {
-        // DIPERBAIKI: Ganti auth('api') → $request->user()
         if ($request->user()->role !== 'karyawan') {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
@@ -31,16 +31,35 @@ class ProdukController extends Controller
             'komposisi.*.quantity' => 'required|numeric|min:0.001'
         ]);
 
-        $gambar = null;
+        $gambarUrl = null;
+
+        // --- BYPASS UPLOAD MANUAL (STORE) ---
         if ($request->hasFile('gambar')) {
-            $uploaded = Cloudinary::upload($request->file('gambar')->getRealPath(), ['folder' => 'produk']);
-            $gambar = $uploaded->getSecurePath();
+            // Inisialisasi Manual (Pasti Berhasil)
+            $cloudinary = new Cloudinary([
+                'cloud' => [
+                    'cloud_name' => 'duh9v4hyi',
+                    'api_key'    => '839695134185465',
+                    'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                ],
+                'url' => [
+                    'secure' => true
+                ]
+            ]);
+
+            $uploaded = $cloudinary->uploadApi()->upload(
+                $request->file('gambar')->getRealPath(),
+                ['folder' => 'produk']
+            );
+            
+            $gambarUrl = $uploaded['secure_url'];
         }
+        // ------------------------------------
 
         $produk = Produk::create([
             'nama' => $request->nama,
             'harga' => $request->harga,
-            'gambar' => $gambar
+            'gambar' => $gambarUrl
         ]);
 
         foreach ($request->komposisi as $k) {
@@ -74,10 +93,27 @@ class ProdukController extends Controller
             'komposisi.*.quantity' => 'required|numeric|min:0.001'
         ]);
 
+        // --- BYPASS UPLOAD MANUAL (UPDATE) ---
         if ($request->hasFile('gambar')) {
-            $uploaded = Cloudinary::upload($request->file('gambar')->getRealPath(), ['folder' => 'produk']);
-            $produk->gambar = $uploaded->getSecurePath();
+            $cloudinary = new Cloudinary([
+                'cloud' => [
+                    'cloud_name' => 'duh9v4hyi',
+                    'api_key'    => '839695134185465',
+                    'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                ],
+                'url' => [
+                    'secure' => true
+                ]
+            ]);
+
+            $uploaded = $cloudinary->uploadApi()->upload(
+                $request->file('gambar')->getRealPath(),
+                ['folder' => 'produk']
+            );
+
+            $produk->gambar = $uploaded['secure_url'];
         }
+        // -------------------------------------
 
         $produk->update([
             'nama' => $request->nama,
