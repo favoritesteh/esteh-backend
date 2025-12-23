@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Validator;
-// [MODIFIKASI] Gunakan Library Native Cloudinary (Manual Bypass)
+// Gunakan Library Native Cloudinary (Manual Bypass)
 use Cloudinary\Cloudinary;
 
 class TransaksiController extends Controller
@@ -75,33 +75,14 @@ class TransaksiController extends Controller
                 }
             }
 
-            return DB::transaction(function () use ($request, $user, $items) {
-                $total = 0;
+            // ------------------------------------------------------------------
+            // [FIX] 1. PROSES UPLOAD DILAKUKAN DI LUAR TRANSACTION
+            // ------------------------------------------------------------------
+            $buktiQrisUrl = null;
 
-                // Validasi stok outlet berdasarkan komposisi
-                foreach ($items as $item) {
-                    $produk = Produk::with('komposisi.bahan')->findOrFail($item['produk_id']);
-                    foreach ($produk->komposisi as $komposisi) {
-                        $stokOutlet = StokOutlet::where('outlet_id', $user->outlet_id)
-                            ->where('bahan_id', $komposisi->bahan_id)
-                            ->first();
-
-                        $kebutuhanBahan = $item['quantity'] * $komposisi->quantity;
-                        if (!$stokOutlet || $stokOutlet->stok < $kebutuhanBahan) {
-                            return response()->json(['message' => "Stok outlet tidak cukup untuk produk ID {$item['produk_id']} (bahan ID {$komposisi->bahan_id})"], 400);
-                        }
-                    }
-
-                    $subtotal = $produk->harga * $item['quantity'];
-                    $total += $subtotal;
-                }
-
-                // Unggah bukti QRIS jika ada
-                $buktiQris = null;
-                
-                // --- [START] MANUAL BYPASS CLOUDINARY UPLOAD ---
-                if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
-                    // Inisialisasi Manual
+            if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
+                try {
+                    // Inisialisasi Manual Cloudinary
                     $cloudinary = new Cloudinary([
                         'cloud' => [
                             'cloud_name' => 'duh9v4hyi',
@@ -118,9 +99,39 @@ class TransaksiController extends Controller
                         ['folder' => 'bukti_qris']
                     );
                     
-                    $buktiQris = $uploaded['secure_url'];
+                    $buktiQrisUrl = $uploaded['secure_url'];
+                    
+                } catch (\Exception $e) {
+                    // Jika upload gagal, return error di sini (sebelum kena Database Transaction)
+                    Log::error('Gagal Upload Cloudinary: ' . $e->getMessage());
+                    return response()->json(['error' => 'Gagal upload bukti QRIS: ' . $e->getMessage()], 500);
                 }
-                // --- [END] MANUAL BYPASS CLOUDINARY UPLOAD ---
+            }
+
+            // ------------------------------------------------------------------
+            // 2. MULAI TRANSACTION DATABASE
+            // ------------------------------------------------------------------
+            return DB::transaction(function () use ($request, $user, $items, $buktiQrisUrl) {
+                $total = 0;
+
+                // Validasi stok outlet berdasarkan komposisi
+                foreach ($items as $item) {
+                    $produk = Produk::with('komposisi.bahan')->findOrFail($item['produk_id']);
+                    foreach ($produk->komposisi as $komposisi) {
+                        $stokOutlet = StokOutlet::where('outlet_id', $user->outlet_id)
+                            ->where('bahan_id', $komposisi->bahan_id)
+                            ->first();
+
+                        $kebutuhanBahan = $item['quantity'] * $komposisi->quantity;
+                        if (!$stokOutlet || $stokOutlet->stok < $kebutuhanBahan) {
+                            // Throw exception agar transaction rollback
+                            throw new \Exception("Stok outlet tidak cukup untuk produk ID {$item['produk_id']} (bahan ID {$komposisi->bahan_id})");
+                        }
+                    }
+
+                    $subtotal = $produk->harga * $item['quantity'];
+                    $total += $subtotal;
+                }
 
                 // Buat transaksi
                 $transaksi = Transaksi::create([
@@ -129,7 +140,7 @@ class TransaksiController extends Controller
                     'tanggal' => $request->input('tanggal', Carbon::now()->format('Y-m-d H:i:s')),
                     'total' => $total,
                     'metode_bayar' => $request->metode_bayar,
-                    'bukti_qris' => $buktiQris
+                    'bukti_qris' => $buktiQrisUrl // Gunakan URL yang sudah diupload di atas
                 ]);
 
                 // Buat item transaksi dan kurangi stok outlet
@@ -192,7 +203,6 @@ class TransaksiController extends Controller
     public function update(Request $request, Transaksi $transaksi)
     {
         try {
-            // Debugging: Log semua input mentah yang diterima
             Log::info('Update Input received (raw): ', $request->all());
 
             $user = auth()->user();
@@ -232,7 +242,39 @@ class TransaksiController extends Controller
                 }
             }
 
-            return DB::transaction(function () use ($request, $user, $transaksi, $items) {
+            // ------------------------------------------------------------------
+            // [FIX] 1. PROSES UPLOAD DILAKUKAN DI LUAR TRANSACTION (UPDATE)
+            // ------------------------------------------------------------------
+            $newBuktiQrisUrl = null;
+
+            if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
+                 try {
+                     $cloudinary = new Cloudinary([
+                        'cloud' => [
+                            'cloud_name' => 'duh9v4hyi',
+                            'api_key'    => '839695134185465',
+                            'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                        ],
+                        'url' => [
+                            'secure' => true
+                        ]
+                    ]);
+
+                    $uploaded = $cloudinary->uploadApi()->upload(
+                        $request->file('bukti_qris')->getRealPath(), 
+                        ['folder' => 'bukti_qris']
+                    );
+                    $newBuktiQrisUrl = $uploaded['secure_url'];
+                 } catch (\Exception $e) {
+                     Log::error('Gagal Upload Cloudinary (Update): ' . $e->getMessage());
+                     return response()->json(['error' => 'Gagal upload bukti QRIS: ' . $e->getMessage()], 500);
+                 }
+            }
+
+            // ------------------------------------------------------------------
+            // 2. MULAI TRANSACTION DATABASE
+            // ------------------------------------------------------------------
+            return DB::transaction(function () use ($request, $user, $transaksi, $items, $newBuktiQrisUrl) {
                 $total = 0;
 
                 // Kembalikan stok outlet dari item transaksi sebelumnya
@@ -261,7 +303,7 @@ class TransaksiController extends Controller
 
                         $kebutuhanBahan = $item['quantity'] * $komposisi->quantity;
                         if (!$stokOutlet || $stokOutlet->stok < $kebutuhanBahan) {
-                            return response()->json(['message' => "Stok outlet tidak cukup untuk produk ID {$item['produk_id']} (bahan ID {$komposisi->bahan_id})"], 400);
+                            throw new \Exception("Stok outlet tidak cukup untuk produk ID {$item['produk_id']} (bahan ID {$komposisi->bahan_id})");
                         }
                     }
 
@@ -269,40 +311,21 @@ class TransaksiController extends Controller
                     $total += $subtotal;
                 }
 
-                // Unggah bukti QRIS jika ada
-                $buktiQris = $transaksi->bukti_qris;
+                // Tentukan Bukti QRIS Akhir
+                $finalBuktiQris = $transaksi->bukti_qris; // Default pakai yang lama
                 
-                // --- [START] MANUAL BYPASS CLOUDINARY UPLOAD (UPDATE) ---
-                if ($request->hasFile('bukti_qris') && $request->metode_bayar === 'qris') {
-                     // Inisialisasi Manual
-                     $cloudinary = new Cloudinary([
-                        'cloud' => [
-                            'cloud_name' => 'duh9v4hyi',
-                            'api_key'    => '839695134185465',
-                            'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
-                        ],
-                        'url' => [
-                            'secure' => true
-                        ]
-                    ]);
-
-                    $uploaded = $cloudinary->uploadApi()->upload(
-                        $request->file('bukti_qris')->getRealPath(), 
-                        ['folder' => 'bukti_qris']
-                    );
-                    $buktiQris = $uploaded['secure_url'];
-
-                } elseif ($request->metode_bayar === 'tunai') {
-                    $buktiQris = null;
+                if ($request->metode_bayar === 'tunai') {
+                    $finalBuktiQris = null; // Kalau ganti tunai, hapus bukti
+                } elseif ($newBuktiQrisUrl) {
+                    $finalBuktiQris = $newBuktiQrisUrl; // Kalau ada upload baru, pakai yang baru
                 }
-                // --- [END] MANUAL BYPASS CLOUDINARY UPLOAD ---
 
                 // Perbarui transaksi
                 $transaksi->update([
                     'tanggal' => $request->input('tanggal', $transaksi->tanggal),
                     'total' => $total,
                     'metode_bayar' => $request->metode_bayar,
-                    'bukti_qris' => $buktiQris
+                    'bukti_qris' => $finalBuktiQris
                 ]);
 
                 // Buat item transaksi baru dan kurangi stok outlet
