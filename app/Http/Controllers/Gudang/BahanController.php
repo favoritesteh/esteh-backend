@@ -22,6 +22,8 @@ class BahanController extends Controller
         $validated = $request->validate([
             'nama' => 'required|string|unique:bahan,nama|max:255',
             'satuan' => 'required|string',
+            'isi_per_satuan' => 'required|integer|min:1', // Menentukan isi (misal: 24 buah)
+            'berat_per_isi' => 'required|numeric|min:0',  // Menentukan berat (misal: 350 gram)
             'stok_minimum_gudang' => 'required|numeric|min:0',
             'stok_minimum_outlet' => 'required|numeric|min:0',
         ]);
@@ -29,7 +31,7 @@ class BahanController extends Controller
         $bahan = Bahan::create($validated);
 
         return response()->json([
-            'message' => 'Bahan berhasil ditambahkan!',
+            'message' => 'Bahan berhasil ditambahkan dengan standar konversi!',
             'data' => $bahan
         ], 201);
     }
@@ -48,6 +50,8 @@ class BahanController extends Controller
         $validated = $request->validate([
             'nama' => 'required|string|max:255|unique:bahan,nama,' . $bahan->id,
             'satuan' => 'required|string',
+            'isi_per_satuan' => 'required|integer|min:1',
+            'berat_per_isi' => 'required|numeric|min:0',
             'stok_minimum_gudang' => 'required|numeric|min:0',
             'stok_minimum_outlet' => 'required|numeric|min:0',
         ]);
@@ -55,7 +59,7 @@ class BahanController extends Controller
         $bahan->update($validated);
 
         return response()->json([
-            'message' => 'Bahan berhasil diupdate!',
+            'message' => 'Bahan dan data konversi berhasil diupdate!',
             'data' => $bahan
         ]);
     }
@@ -67,7 +71,6 @@ class BahanController extends Controller
         }
 
         $bahan->delete();
-
         return response()->json(['message' => 'Bahan berhasil dihapus!']);
     }
 }

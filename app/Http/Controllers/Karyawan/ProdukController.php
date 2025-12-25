@@ -6,14 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Produk;
 use App\Models\Komposisi;
 use Illuminate\Http\Request;
-// Gunakan Library Native Cloudinary (Manual Bypass)
 use Cloudinary\Cloudinary;
 
 class ProdukController extends Controller
 {
     public function index()
     {
-        return Produk::where('is_available', true)->with('komposisi.bahan')->get();
+        // Menampilkan produk berserta kategorinya
+        return Produk::where('is_available', true)->with(['komposisi.bahan', 'kategori'])->get();
     }
 
     public function store(Request $request)
@@ -24,6 +24,7 @@ class ProdukController extends Controller
 
         $request->validate([
             'nama' => 'required|string',
+            'kategori_id' => 'required|exists:kategoris,id', // Validasi relasi kategori
             'harga' => 'required|numeric',
             'gambar' => 'nullable|image|mimes:jpeg,png,jpg|max:5048',
             'komposisi' => 'required|array|min:1',
@@ -32,32 +33,26 @@ class ProdukController extends Controller
         ]);
 
         $gambarUrl = null;
-
-        // --- BYPASS UPLOAD MANUAL (STORE) ---
         if ($request->hasFile('gambar')) {
-            // Inisialisasi Manual (Pasti Berhasil)
             $cloudinary = new Cloudinary([
                 'cloud' => [
                     'cloud_name' => 'duh9v4hyi',
                     'api_key'    => '839695134185465',
                     'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
                 ],
-                'url' => [
-                    'secure' => true
-                ]
+                'url' => ['secure' => true]
             ]);
 
             $uploaded = $cloudinary->uploadApi()->upload(
                 $request->file('gambar')->getRealPath(),
                 ['folder' => 'produk']
             );
-            
             $gambarUrl = $uploaded['secure_url'];
         }
-        // ------------------------------------
 
         $produk = Produk::create([
             'nama' => $request->nama,
+            'kategori_id' => $request->kategori_id,
             'harga' => $request->harga,
             'gambar' => $gambarUrl
         ]);
@@ -70,12 +65,7 @@ class ProdukController extends Controller
             ]);
         }
 
-        return response()->json($produk->load('komposisi.bahan'), 201);
-    }
-
-    public function show(Produk $produk)
-    {
-        return $produk->load('komposisi.bahan');
+        return response()->json($produk->load('komposisi.bahan', 'kategori'), 201);
     }
 
     public function update(Request $request, Produk $produk)
@@ -86,14 +76,11 @@ class ProdukController extends Controller
 
         $request->validate([
             'nama' => 'required|string',
+            'kategori_id' => 'required|exists:kategoris,id',
             'harga' => 'required|numeric',
-            'gambar' => 'nullable|image|mimes:jpeg,png,jpg|max:5048',
-            'komposisi' => 'required|array|min:1',
-            'komposisi.*.bahan_id' => 'required|exists:bahan,id',
-            'komposisi.*.quantity' => 'required|numeric|min:0.001'
+            'komposisi' => 'required|array|min:1'
         ]);
 
-        // --- BYPASS UPLOAD MANUAL (UPDATE) ---
         if ($request->hasFile('gambar')) {
             $cloudinary = new Cloudinary([
                 'cloud' => [
@@ -101,22 +88,19 @@ class ProdukController extends Controller
                     'api_key'    => '839695134185465',
                     'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
                 ],
-                'url' => [
-                    'secure' => true
-                ]
+                'url' => ['secure' => true]
             ]);
 
             $uploaded = $cloudinary->uploadApi()->upload(
                 $request->file('gambar')->getRealPath(),
                 ['folder' => 'produk']
             );
-
             $produk->gambar = $uploaded['secure_url'];
         }
-        // -------------------------------------
 
         $produk->update([
             'nama' => $request->nama,
+            'kategori_id' => $request->kategori_id,
             'harga' => $request->harga,
             'gambar' => $produk->gambar
         ]);
@@ -130,16 +114,6 @@ class ProdukController extends Controller
             ]);
         }
 
-        return response()->json($produk->load('komposisi.bahan'));
-    }
-
-    public function destroy(Produk $produk, Request $request)
-    {
-        if ($request->user()->role !== 'karyawan') {
-            return response()->json(['message' => 'Akses ditolak'], 403);
-        }
-
-        $produk->delete();
-        return response()->json(['message' => 'Produk berhasil dihapus!']);
+        return response()->json($produk->load('komposisi.bahan', 'kategori'));
     }
 }

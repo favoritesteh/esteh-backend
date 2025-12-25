@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Bahan extends Model
 {
     protected $table = 'bahan'; // TAMBAHKAN INI!
-    protected $fillable = ['nama', 'satuan', 'stok_minimum_gudang', 'stok_minimum_outlet'];
+    protected $fillable = ['nama', 'satuan', 'isi_per_satuan', 'berat_per_isi', 'stok_minimum_gudang', 'stok_minimum_outlet'];
 
     public function komposisi() { return $this->hasMany(Komposisi::class); }
     public function stokGudang() { return $this->hasOne(StokGudang::class); }
