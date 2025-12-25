@@ -29,7 +29,7 @@ class PermintaanStokController extends Controller
     }
 
     /**
-     * Update status permintaan stok (Approval & Pengiriman).
+     * Update status permintaan stok (Approval & Pengiriman Otomatis).
      */
     public function update(Request $request, $id)
     {
@@ -44,7 +44,7 @@ class PermintaanStokController extends Controller
                 'status' => 'required|in:disetujui,ditolak,dikirim'
             ]);
 
-            $permintaan = PermintaanStok::findOrFail($id);
+            $permintaan = PermintaanStok::with('bahan')->findOrFail($id);
 
             // LOGIKA 1: PROSES APPROVAL (Disetujui atau Ditolak)
             // Pada tahap ini stok gudang belum berkurang.
@@ -57,9 +57,9 @@ class PermintaanStokController extends Controller
             }
 
             // LOGIKA 2: PROSES PENGIRIMAN (Dikirim)
-            // Stok gudang akan berkurang di tahap ini.
+            // Stok gudang akan berkurang otomatis dalam satuan GRAM di tahap ini.
             if ($request->status === 'dikirim') {
-                // Syarat: Harus sudah disetujui sebelumnya (Validasi Alur)
+                // Syarat: Harus sudah disetujui sebelumnya
                 if ($permintaan->status !== 'disetujui') {
                     return response()->json([
                         'error' => 'Validasi Gagal',
@@ -68,25 +68,31 @@ class PermintaanStokController extends Controller
                 }
 
                 return DB::transaction(function () use ($permintaan) {
+                    $bahan = $permintaan->bahan;
+                    
+                    // HITUNG TOTAL GRAM OTOMATIS: (Jumlah Unit * (Isi * Berat))
+                    // Contoh: Minta 2 (bungkus) * (1 * 500g) = 1000g
+                    $totalGramKeluar = $permintaan->jumlah * ($bahan->isi_per_satuan * $bahan->berat_per_isi);
+
                     $stokGudang = StokGudang::where('bahan_id', $permintaan->bahan_id)->first();
 
-                    // Cek ketersediaan stok di gudang (satuan sudah dalam gram)
-                    if (!$stokGudang || $stokGudang->stok < $permintaan->jumlah) {
+                    // Cek ketersediaan stok di gudang dalam satuan GRAM
+                    if (!$stokGudang || $stokGudang->stok < $totalGramKeluar) {
                         return response()->json([
                             'error' => 'Stok Gagal',
-                            'message' => 'Stok di gudang tidak mencukupi untuk permintaan ini.'
+                            'message' => 'Stok di gudang tidak mencukupi. Tersedia: ' . ($stokGudang->stok ?? 0) . 'g, Dibutuhkan: ' . $totalGramKeluar . 'g'
                         ], 400);
                     }
 
-                    // 1. Kurangi stok gudang secara otomatis
-                    $stokGudang->decrement('stok', $permintaan->jumlah);
+                    // 1. Kurangi stok gudang dalam satuan GRAM
+                    $stokGudang->decrement('stok', $totalGramKeluar);
 
-                    // 2. Buat record di tabel Barang Keluar secara otomatis sebagai bukti pengiriman
+                    // 2. Buat record Barang Keluar secara otomatis (Simpan angka GRAM untuk outlet)
                     BarangKeluar::create([
                         'bahan_id' => $permintaan->bahan_id,
                         'outlet_id' => $permintaan->outlet_id,
                         'permintaan_id' => $permintaan->id,
-                        'jumlah' => $permintaan->jumlah,
+                        'jumlah' => $totalGramKeluar, // Nilai gramasi dikirim ke outlet
                         'tanggal_keluar' => now(),
                         'status' => 'dikirim'
                     ]);
@@ -95,18 +101,19 @@ class PermintaanStokController extends Controller
                     $permintaan->update(['status' => 'dikirim']);
 
                     return response()->json([
-                        'message' => 'Barang berhasil dikirim. Stok gudang telah berkurang otomatis.',
+                        'message' => 'Barang berhasil dikirim dan dikonversi otomatis ke gram!',
+                        'total_gram_dikirim' => $totalGramKeluar,
                         'data' => $permintaan->load('bahan')
                     ]);
                 });
             }
 
         } catch (\Exception $e) {
-            // Log error untuk pengecekan di terminal/console Railway
+            // Log error asli agar bisa dicek di console Railway
             Log::error('UPDATE PERMINTAAN STOK GAGAL: ' . $e->getMessage());
             return response()->json([
                 'error' => 'Terjadi kesalahan sistem',
-                'message' => $e->getMessage() // Membantu debugging jika ada error database
+                'message' => $e->getMessage() 
             ], 500);
         }
     }
