@@ -10,12 +10,20 @@ use Cloudinary\Cloudinary;
 
 class ProdukController extends Controller
 {
+    /**
+     * Menampilkan daftar produk beserta kategorinya (Read-Only)
+     */
     public function index()
     {
         // Menampilkan produk berserta kategorinya
-        return Produk::where('is_available', true)->with(['komposisi.bahan', 'kategori'])->get();
+        return Produk::where('is_available', true)
+            ->with(['komposisi.bahan', 'kategori'])
+            ->get();
     }
 
+    /**
+     * Menambahkan produk baru (Create)
+     */
     public function store(Request $request)
     {
         if ($request->user()->role !== 'karyawan') {
@@ -24,7 +32,7 @@ class ProdukController extends Controller
 
         $request->validate([
             'nama' => 'required|string',
-            'kategori_id' => 'required|exists:kategoris,id', // Validasi relasi kategori
+            'kategori_id' => 'required|exists:kategoris,id',
             'harga' => 'required|numeric',
             'gambar' => 'nullable|image|mimes:jpeg,png,jpg|max:5048',
             'komposisi' => 'required|array|min:1',
@@ -68,6 +76,24 @@ class ProdukController extends Controller
         return response()->json($produk->load('komposisi.bahan', 'kategori'), 201);
     }
 
+    /**
+     * Menampilkan detail satu produk (Read One)
+     * Perbaikan: Method ini sebelumnya tidak ada dan menyebabkan Error 500
+     */
+    public function show($id)
+    {
+        $produk = Produk::with(['komposisi.bahan', 'kategori'])->find($id);
+
+        if (!$produk) {
+            return response()->json(['message' => 'Produk tidak ditemukan'], 404);
+        }
+
+        return response()->json($produk);
+    }
+
+    /**
+     * Memperbarui data produk (Update)
+     */
     public function update(Request $request, Produk $produk)
     {
         if ($request->user()->role !== 'karyawan') {
@@ -105,6 +131,7 @@ class ProdukController extends Controller
             'gambar' => $produk->gambar
         ]);
 
+        // Reset komposisi lama dan buat yang baru
         $produk->komposisi()->delete();
         foreach ($request->komposisi as $k) {
             Komposisi::create([
@@ -115,5 +142,22 @@ class ProdukController extends Controller
         }
 
         return response()->json($produk->load('komposisi.bahan', 'kategori'));
+    }
+
+    /**
+     * Menghapus produk (Delete)
+     * Perbaikan: Method ini sebelumnya tidak ada dan menyebabkan Error 500
+     */
+    public function destroy(Request $request, Produk $produk)
+    {
+        if ($request->user()->role !== 'karyawan') {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        // Hapus produk (Komposisi akan terhapus otomatis jika ada cascade di database, 
+        // atau bisa dihapus manual $produk->komposisi()->delete() jika perlu)
+        $produk->delete();
+
+        return response()->json(['message' => 'Produk berhasil dihapus']);
     }
 }
