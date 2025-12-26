@@ -42,6 +42,7 @@ Route::middleware('api')->group(function () {
 
         // === ROLE: KARYAWAN ===
         Route::middleware('role:karyawan')->group(function () {
+            Route::get('kategori', [\App\Http\Controllers\Karyawan\KategoriController::class, 'index']);
             Route::apiResource('produk', \App\Http\Controllers\Karyawan\ProdukController::class);
             Route::apiResource('transaksi', \App\Http\Controllers\Karyawan\TransaksiController::class);
             Route::get('stok/outlet', [\App\Http\Controllers\Karyawan\StokController::class, 'outlet']);
