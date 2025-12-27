@@ -83,6 +83,13 @@ class BarangMasukController extends Controller
         }
     }
 
+    public function update(Request $request, $id)
+    {
+        return response()->json([
+            'message' => 'Fitur update dinonaktifkan demi konsistensi stok. Silakan hapus dan input ulang jika ada kesalahan.'
+        ], 405);
+    }
+
     public function destroy(Request $request, $id)
     {
         try {

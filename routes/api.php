@@ -31,6 +31,7 @@ Route::middleware('api')->group(function () {
         // === ROLE: GUDANG ===
         Route::prefix('gudang')->group(function () {
             Route::middleware('role:gudang')->group(function () {
+                Route::apiResource('barang-masuk', \App\Http\Controllers\Gudang\BarangMasukController::class)->except(['update']);
                 Route::apiResource('kategori', \App\Http\Controllers\Gudang\KategoriController::class); // CRUD Kategori baru
                 Route::apiResource('bahan', \App\Http\Controllers\Gudang\BahanController::class);
                 Route::apiResource('barang-masuk', \App\Http\Controllers\Gudang\BarangMasukController::class);
