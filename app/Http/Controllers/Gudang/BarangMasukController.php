@@ -33,7 +33,6 @@ class BarangMasukController extends Controller
     public function store(Request $request)
     {
         try {
-            // Validasi Role (Double Check)
             if ($request->user()->role !== 'gudang') {
                 return response()->json(['message' => 'Akses ditolak'], 403);
             }
@@ -48,11 +47,9 @@ class BarangMasukController extends Controller
                 $bahan = Bahan::findOrFail($request->bahan_id);
                 $jumlahInput = (float) $request->jumlah;
 
-                // LOGIKA KONVERSI: (Input * (Isi per Satuan * Berat per Isi))
-                // Misal: 1 Kotak * (24 Buah * 350 Gram) = 8.400 Gram
+                // Hitung gramasi: Input * (Isi * Berat)
                 $totalGram = $jumlahInput * ($bahan->isi_per_satuan * $bahan->berat_per_isi);
 
-                // 1. Simpan riwayat barang masuk (tetap simpan angka unit asli '1' untuk laporan)
                 $masuk = BarangMasuk::create([
                     'bahan_id' => $request->bahan_id,
                     'jumlah'   => $jumlahInput,
@@ -60,7 +57,7 @@ class BarangMasukController extends Controller
                     'supplier' => $request->supplier
                 ]);
 
-                // 2. Update Stok Gudang (Menambah dalam satuan GRAM)
+                // Tambah Stok Gudang
                 $stok = StokGudang::firstOrCreate(
                     ['bahan_id' => $request->bahan_id],
                     ['stok' => 0]
@@ -68,26 +65,78 @@ class BarangMasukController extends Controller
                 $stok->increment('stok', $totalGram);
 
                 return response()->json([
-                    'message' => 'Barang masuk berhasil dicatat dan dikonversi ke gram!',
-                    'data'    => $masuk->load('bahan'),
-                    'total_gram_ditambahkan' => $totalGram
+                    'message' => 'Barang masuk berhasil dicatat!',
+                    'data'    => $masuk->load('bahan')
                 ], 201);
             });
 
         } catch (\Exception $e) {
-            Log::error('BARANG MASUK GAGAL: ' . $e->getMessage());
-            return response()->json([
-                'error'   => 'Gagal menyimpan barang masuk',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('BARANG MASUK STORE ERROR: ' . $e->getMessage());
+            return response()->json(['error' => 'Gagal menyimpan: ' . $e->getMessage()], 500);
         }
     }
 
+    /**
+     * UPDATE: Mengoreksi data barang masuk & menyesuaikan stok gudang otomatis.
+     */
     public function update(Request $request, $id)
     {
-        return response()->json([
-            'message' => 'Fitur update dinonaktifkan demi konsistensi stok. Silakan hapus dan input ulang jika ada kesalahan.'
-        ], 405);
+        try {
+            if ($request->user()->role !== 'gudang') {
+                return response()->json(['message' => 'Akses ditolak'], 403);
+            }
+
+            // Validasi Input
+            $request->validate([
+                'bahan_id' => 'required|exists:bahan,id',
+                'jumlah'   => 'required|numeric|min:0.001',
+                'supplier' => 'required|string|max:255'
+            ]);
+
+            return DB::transaction(function () use ($request, $id) {
+                // 1. Ambil Data Lama (Existing)
+                $barangMasuk = BarangMasuk::findOrFail($id);
+                
+                // Ambil info bahan lama untuk hitung konversi mundur
+                $bahanLama = Bahan::findOrFail($barangMasuk->bahan_id);
+                $gramLama  = $barangMasuk->jumlah * ($bahanLama->isi_per_satuan * $bahanLama->berat_per_isi);
+
+                // 2. KOREKSI NEGATIF: Kurangi stok gudang seolah transaksi lama tidak pernah terjadi
+                // Kita gunakan decrement, biarkan negatif jika memang stok fisik sudah terpakai (audit trail)
+                StokGudang::where('bahan_id', $barangMasuk->bahan_id)->decrement('stok', $gramLama);
+
+                // ---------------------------------------------------------
+
+                // 3. Siapkan Data Baru
+                $bahanBaru = Bahan::findOrFail($request->bahan_id);
+                $jumlahBaru = (float) $request->jumlah;
+                $gramBaru  = $jumlahBaru * ($bahanBaru->isi_per_satuan * $bahanBaru->berat_per_isi);
+
+                // 4. Update Record Barang Masuk
+                $barangMasuk->update([
+                    'bahan_id' => $request->bahan_id,
+                    'jumlah'   => $jumlahBaru,
+                    'supplier' => $request->supplier,
+                    // Tanggal boleh diupdate atau dibiarkan (di sini kita biarkan tetap tanggal asli)
+                ]);
+
+                // 5. KOREKSI POSITIF: Tambahkan stok gudang berdasarkan data baru
+                $stokGudangBaru = StokGudang::firstOrCreate(
+                    ['bahan_id' => $request->bahan_id],
+                    ['stok' => 0]
+                );
+                $stokGudangBaru->increment('stok', $gramBaru);
+
+                return response()->json([
+                    'message' => 'Barang masuk berhasil dikoreksi, stok telah disesuaikan!',
+                    'data'    => $barangMasuk->load('bahan')
+                ], 200);
+            });
+
+        } catch (\Exception $e) {
+            Log::error('BARANG MASUK UPDATE ERROR: ' . $e->getMessage());
+            return response()->json(['error' => 'Gagal update: ' . $e->getMessage()], 500);
+        }
     }
 
     public function destroy(Request $request, $id)
@@ -101,7 +150,7 @@ class BarangMasukController extends Controller
                 $barangMasuk = BarangMasuk::findOrFail($id);
                 $bahan = Bahan::findOrFail($barangMasuk->bahan_id);
 
-                // Hitung kembali berapa gram yang dulu ditambahkan untuk dikurangi
+                // Hitung berapa gram yang harus dibatalkan
                 $gramDihapus = $barangMasuk->jumlah * ($bahan->isi_per_satuan * $bahan->berat_per_isi);
 
                 // Kurangi stok gudang
@@ -109,11 +158,11 @@ class BarangMasukController extends Controller
                 
                 $barangMasuk->delete();
 
-                return response()->json(['message' => 'Barang masuk berhasil dihapus dan stok dikoreksi'], 200);
+                return response()->json(['message' => 'Barang masuk dihapus & stok dikurangi'], 200);
             });
         } catch (\Exception $e) {
-            Log::error('DELETE BARANG MASUK GAGAL: ' . $e->getMessage());
-            return response()->json(['error' => 'Gagal menghapus data'], 500);
+            Log::error('BARANG MASUK DESTROY ERROR: ' . $e->getMessage());
+            return response()->json(['error' => 'Gagal menghapus'], 500);
         }
     }
 }
