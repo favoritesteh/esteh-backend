@@ -115,31 +115,35 @@ class BarangKeluarController extends Controller
 
     /**
      * Menerima barang keluar.
-     * UPDATE: Support Smart Lookup (Bisa terima ID BarangKeluar ATAU ID PermintaanStok)
+     * UPDATE: FIX ID COLLISION
+     * Prioritas pencarian dibalik: Cek ID Permintaan DULU, baru Cek ID Barang Keluar.
      */
     public function terima(Request $request, $id)
     {
         try {
             return DB::transaction(function () use ($request, $id) {
                 // -----------------------------------------------------------
-                // 1. SMART LOOKUP LOGIC
+                // 1. PRIORITAS UTAMA: Cari berdasarkan 'permintaan_id'
                 // -----------------------------------------------------------
-                // Coba cari anggap $id adalah ID Barang Keluar (Default)
-                $keluar = BarangKeluar::find($id);
+                // Logikanya: Frontend/User kemungkinan besar mengirimkan ID Permintaan
+                // karena itu yang tampil di daftar 'Pesanan Saya'.
+                // Kita cari record BarangKeluar yang punya permintaan_id = $id
+                $keluar = BarangKeluar::where('permintaan_id', $id)->first();
 
-                // Jika tidak ketemu, coba cari anggap $id adalah ID Permintaan Stok
+                // -----------------------------------------------------------
+                // 2. BACKUP PLAN: Cari berdasarkan 'id' Barang Keluar
+                // -----------------------------------------------------------
+                // Jika tidak ketemu lewat permintaan_id, baru kita anggap user mengirim ID asli BarangKeluar.
+                // Ini berguna untuk admin gudang atau testing via Postman pakai ID tabel asli.
                 if (!$keluar) {
-                    $keluar = BarangKeluar::where('permintaan_id', $id)
-                        ->where('status', 'dikirim') // Ambil yang statusnya masih dikirim
-                        ->latest()
-                        ->first();
+                    $keluar = BarangKeluar::find($id);
                 }
 
-                // Jika masih tidak ketemu juga, throw error 404
+                // Jika masih tidak ketemu juga di kedua tabel, throw error 404
                 if (!$keluar) {
                     return response()->json([
                         'error' => 'Data Tidak Ditemukan',
-                        'message' => 'Tidak ditemukan data Barang Keluar atau Permintaan Stok dengan ID ' . $id
+                        'message' => 'Tidak ditemukan data pengiriman dengan ID Permintaan atau ID Barang Keluar: ' . $id
                     ], 404);
                 }
                 // -----------------------------------------------------------
@@ -151,8 +155,11 @@ class BarangKeluarController extends Controller
                     }
                 }
 
+                // Cek status, pastikan 'dikirim'
                 if ($keluar->status !== 'dikirim') {
-                    return response()->json(['message' => 'Barang sudah diterima atau belum dikirim'], 400);
+                    // Beri pesan lebih spesifik agar user tidak bingung
+                    $statusMsg = $keluar->status === 'diterima' ? 'Barang ini SUDAH diterima sebelumnya.' : 'Barang belum dikirim oleh gudang.';
+                    return response()->json(['message' => $statusMsg], 400);
                 }
 
                 // --- CLOUDINARY UPLOAD (MANUAL BYPASS) ---
@@ -182,7 +189,7 @@ class BarangKeluarController extends Controller
                 }
                 // -----------------------------------------
 
-                // Update Status
+                // Update Status Barang Keluar
                 $keluar->status = 'diterima';
                 $keluar->save();
 
