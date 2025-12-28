@@ -115,13 +115,34 @@ class BarangKeluarController extends Controller
 
     /**
      * Menerima barang keluar.
-     * MENGGUNAKAN MANUAL CONFIGURATION UNTUK BYPASS CACHE ERROR
+     * UPDATE: Support Smart Lookup (Bisa terima ID BarangKeluar ATAU ID PermintaanStok)
      */
     public function terima(Request $request, $id)
     {
         try {
             return DB::transaction(function () use ($request, $id) {
-                $keluar = BarangKeluar::findOrFail($id);
+                // -----------------------------------------------------------
+                // 1. SMART LOOKUP LOGIC
+                // -----------------------------------------------------------
+                // Coba cari anggap $id adalah ID Barang Keluar (Default)
+                $keluar = BarangKeluar::find($id);
+
+                // Jika tidak ketemu, coba cari anggap $id adalah ID Permintaan Stok
+                if (!$keluar) {
+                    $keluar = BarangKeluar::where('permintaan_id', $id)
+                        ->where('status', 'dikirim') // Ambil yang statusnya masih dikirim
+                        ->latest()
+                        ->first();
+                }
+
+                // Jika masih tidak ketemu juga, throw error 404
+                if (!$keluar) {
+                    return response()->json([
+                        'error' => 'Data Tidak Ditemukan',
+                        'message' => 'Tidak ditemukan data Barang Keluar atau Permintaan Stok dengan ID ' . $id
+                    ], 404);
+                }
+                // -----------------------------------------------------------
 
                 // Validasi akses karyawan
                 if ($request->user()->role === 'karyawan') {
@@ -134,40 +155,43 @@ class BarangKeluarController extends Controller
                     return response()->json(['message' => 'Barang sudah diterima atau belum dikirim'], 400);
                 }
 
-                // --- MODIFIKASI: BYPASS CONFIG LARAVEL ---
+                // --- CLOUDINARY UPLOAD (MANUAL BYPASS) ---
                 if ($request->hasFile('bukti_foto')) {
-                    
-                    // Kita inisialisasi Cloudinary secara MANUAL disini.
-                    // Ini tidak akan peduli dengan file .env atau config/cloudinary.php yang error.
-                    $cloudinary = new Cloudinary([
-                        'cloud' => [
-                            'cloud_name' => 'duh9v4hyi',
-                            'api_key'    => '839695134185465',
-                            'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
-                        ],
-                        'url' => [
-                            'secure' => true
-                        ]
-                    ]);
+                    try {
+                        $cloudinary = new Cloudinary([
+                            'cloud' => [
+                                'cloud_name' => 'duh9v4hyi',
+                                'api_key'    => '839695134185465',
+                                'api_secret' => 'TnOly4DFI4JbYvdARmEQjIatvZc',
+                            ],
+                            'url' => [
+                                'secure' => true
+                            ]
+                        ]);
 
-                    // Upload menggunakan instance manual tadi
-                    $uploaded = $cloudinary->uploadApi()->upload(
-                        $request->file('bukti_foto')->getRealPath(), 
-                        ['folder' => 'bukti_penerimaan']
-                    );
-                    
-                    // Ambil URL secure dari response array
-                    $keluar->bukti_foto = $uploaded['secure_url'];
+                        $uploaded = $cloudinary->uploadApi()->upload(
+                            $request->file('bukti_foto')->getRealPath(), 
+                            ['folder' => 'bukti_penerimaan']
+                        );
+                        
+                        $keluar->bukti_foto = $uploaded['secure_url'];
+                    } catch (\Exception $e) {
+                        Log::error('Upload Gagal: ' . $e->getMessage());
+                        // Opsional: return error atau lanjut tanpa foto
+                    }
                 }
                 // -----------------------------------------
 
+                // Update Status
                 $keluar->status = 'diterima';
                 $keluar->save();
 
+                // Update Status di Permintaan Stok juga (Sync)
                 if ($keluar->permintaan_id) {
                     PermintaanStok::where('id', $keluar->permintaan_id)->update(['status' => 'diterima']);
                 }
 
+                // Tambah Stok Outlet
                 $stokOutlet = StokOutlet::firstOrCreate(
                     ['outlet_id' => $keluar->outlet_id, 'bahan_id' => $keluar->bahan_id],
                     ['stok' => 0]
